@@ -2,6 +2,7 @@
 
 mod camera;
 
+use cgmath::Matrix4;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -82,13 +83,14 @@ impl State {
 			source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
 		});
 
-		let camera = Camera {
-			transform: cgmath::Matrix4::look_at_lh((0.0, 0.0, -2.0).into(), (0.0, 0.0, 0.0).into(), (0.0, 1.0, 0.0).into()),
-			aspect: config.width as f32 / config.height as f32,
-			fovy: 70.0,
-			znear: 0.1,
-			zfar: 100.0,
-		};
+		let camera = Camera::new(
+			Matrix4::from_translation((0.0, 0.0, 3.0).into()),
+			// cgmath::Matrix4::look_at_lh((0.0, 0.0, -3.0).into(), (0.0, 0.0, 0.0).into(), (0.0, 1.0, 0.0).into()),
+			config.width as f32 / config.height as f32,
+			70.0,
+			0.1,
+			100.0
+		);
 
 		let camera_uniform = MatrixUniform::from_Matrix4(camera.view_proj());
 
@@ -156,7 +158,7 @@ impl State {
 				topology: wgpu::PrimitiveTopology::TriangleList, 
 				strip_index_format: None,
 				front_face: wgpu::FrontFace::Ccw, 
-				cull_mode: Some(wgpu::Face::Back),
+				cull_mode: None,// Some(wgpu::Face::Back),
 				polygon_mode: wgpu::PolygonMode::Fill,
 				unclipped_depth: false,
 				conservative: false,
@@ -200,10 +202,13 @@ impl State {
 	}
 
     fn input(&mut self, event: &WindowEvent) -> bool {
+		self.camera.input(event);
 		false
 	}
 
     fn update(&mut self) {
+		self.camera.update();
+		
         self.camera_uniform = MatrixUniform::from_Matrix4(self.camera.view_proj());
         self.queue.write_buffer(
             &self.camera_buffer,
@@ -261,8 +266,7 @@ pub async fn run() {
 	let mut state = State::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
-		match event 
-		{
+		match event {
 			Event::RedrawRequested(window_id) if window_id == state.window().id() => {
 				state.update();
 				match state.render() {
@@ -280,8 +284,7 @@ pub async fn run() {
 				window_id,
 			} if window_id == state.window().id() => if !state.input(event) {
 				match event {
-					WindowEvent::CloseRequested
-					| WindowEvent::KeyboardInput {
+					WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
 						input:
 							KeyboardInput {
 								state: ElementState::Pressed,
