@@ -1,4 +1,4 @@
-use cgmath::{Deg, Matrix4, One, Rad, SquareMatrix, Vector2, Vector3, Vector4};
+use cgmath::{Deg, InnerSpace, Matrix4, One, Rad, SquareMatrix, Vector2, Vector3, Vector4};
 use winit::{dpi::PhysicalPosition, event::*};
 
 #[repr(C)]
@@ -31,6 +31,7 @@ pub struct Camera {
 	dragging: bool,
 	last_cursorpos: PhysicalPosition<f64>,
 	cursorpos: PhysicalPosition<f64>,
+	zoom_factor: f32,
 
 	forward: f32,
 	backward: f32,
@@ -52,6 +53,7 @@ impl Camera {
 			dragging: false,
 			last_cursorpos: PhysicalPosition { x: 0.0, y: 0.0 },
 			cursorpos: PhysicalPosition { x: 0.0, y: 0.0 },
+			zoom_factor: 1.0,
 
 			forward: 0.0,
 			backward: 0.0,
@@ -105,6 +107,14 @@ impl Camera {
 					_ => {}
 				}
 			},
+			WindowEvent::MouseWheel { delta, .. } => {
+				match delta {
+					MouseScrollDelta::LineDelta(_, y) => {
+						self.zoom_factor *= 0.9_f32.powf(*y);
+					},
+					_ => {}
+				}
+			},
 			WindowEvent::CursorMoved { position, .. } => {
 				self.cursorpos = *position;
 			},
@@ -121,12 +131,21 @@ impl Camera {
 		let z = self.backward - self.forward;
 		
 		let pos = self.transform.w;
+		let dist = Vector3::new(pos.x, pos.y, pos.z).magnitude();
 		self.transform.w = Vector4::new(0.0, 0.0, 0.0, 1.0);
+
 		if self.dragging {
-			let yaw = Matrix4::from_angle_y(Deg { 0: -delta.x * 0.05 });
+			let yaw = Matrix4::from_angle_y(Deg { 0: -delta.x * 0.35 });
 			self.transform = yaw * self.transform;
+			
+			let tilt = Matrix4::from_angle_x(Deg { 0: -delta.y * 0.35 });
+			self.transform = self.transform * tilt;
+			
 		}
-		self.transform.w = pos;
-		self.transform = Matrix4::from_translation(Vector3::new(x, y, z) * 0.05) * self.transform;
+
+		self.transform = self.transform * Matrix4::from_translation((0.0, 0.0, dist * self.zoom_factor).into());
+		self.zoom_factor = 1.0;
+
+		self.transform = self.transform * Matrix4::from_translation(Vector3::new(x, y, z) * 0.05);
 	}
 }
