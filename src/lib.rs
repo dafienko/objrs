@@ -43,7 +43,7 @@ impl State {
 		
         let adapter = instance.request_adapter(
 			&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::default(),
+				power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             },
@@ -52,11 +52,7 @@ impl State {
 		let (device, queue) = adapter.request_device(
 			&wgpu::DeviceDescriptor {
 				features: wgpu::Features::empty(),
-				limits: if cfg!(target_arch = "wasm32") {
-					wgpu::Limits::downlevel_webgl2_defaults()
-				} else {
-					wgpu::Limits::default()
-				},
+				limits: wgpu::Limits::default(),
 				label: None,
 			},
 			None,
@@ -209,7 +205,7 @@ impl State {
 		}
 	}
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
+    fn input(&mut self, event: &WindowEvent) -> bool { 
 		self.camera.input(event);
 		false
 	}
