@@ -33,5 +33,8 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(in.normal.xyz, 1.0);
+	let light = normalize(vec3<f32>(0.3, -1.0, 0.0));
+	let dot = dot(-light, in.normal);
+	let color = vec3<f32>(max(dot, 0.01));
+    return vec4<f32>(color, 1.0);
 }

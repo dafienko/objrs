@@ -1,4 +1,4 @@
-use cgmath::{Deg, InnerSpace, Matrix4, One, Rad, SquareMatrix, Vector2, Vector3, Vector4};
+use cgmath::{Deg, Matrix4, SquareMatrix, Vector3, Vector4};
 use winit::{dpi::PhysicalPosition, event::*};
 
 #[repr(C)]
@@ -8,13 +8,7 @@ pub struct MatrixUniform {
 }
 
 impl MatrixUniform {
-	pub fn new() -> Self {
-        Self {
-            data: cgmath::Matrix4::identity().into(),
-        }
-    }
-
-    pub fn from_Matrix4(mat: cgmath::Matrix4<f32>) -> Self {
+    pub fn from_matrix4(mat: cgmath::Matrix4<f32>) -> Self {
         Self {
             data: mat.into()
         }
@@ -27,7 +21,9 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+
 	pub zoom: f32,
+	pub speed: f32,
 
 	dragging: bool,
 	last_cursorpos: PhysicalPosition<f64>,
@@ -43,7 +39,6 @@ pub struct Camera {
 }
 
 impl Camera {
-	const SPEED: f32 = 0.1;
 	const ZOOM_SENSITIVITY: f32 = 0.9;
 	const TRACKPAD_ZOOM_SENSITIVITY: f32 = 0.5;
 	const LOOK_SENSITIVITY: f32 = 0.35;
@@ -55,6 +50,7 @@ impl Camera {
 			fovy: fovy,
 			znear: znear,
 			zfar: zfar,
+			speed: 0.05,
 			zoom: 2.0,
 
 			dragging: false,
@@ -124,8 +120,7 @@ impl Camera {
 							self.delta[0] + *x as f32, 
 							self.delta[1] + *y as f32
 						];
-					},
-					_ => {}
+					}
 				}
 			},
 			WindowEvent::TouchpadMagnify { delta, .. } => {
@@ -161,7 +156,7 @@ impl Camera {
 		self.transform = self.transform * tilt;
 		
 		self.transform = self.transform * Matrix4::from_translation((0.0, 0.0, self.zoom * self.zoom_factor).into());
-		self.transform = self.transform * Matrix4::from_translation(Vector3::new(x, y, z) * Self::SPEED);
+		self.transform = self.transform * Matrix4::from_translation(Vector3::new(x, y, z) * self.speed * self.zoom);
 		self.transform.w += Vector4::new(pos.x, pos.y, pos.z, 0.0);
 		
 		self.zoom_factor = 1.0;

@@ -4,7 +4,7 @@ mod camera;
 mod model;
 mod texture;
 
-use cgmath::Matrix4;
+use cgmath::{Matrix4, Vector3};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -15,7 +15,7 @@ use wgpu::util::DeviceExt;
 
 use camera::{Camera, MatrixUniform};
 use model::{Mesh, Vertex};
-use texture::{Texture};
+use texture::Texture;
 
 struct State {
     surface: wgpu::Surface,
@@ -31,12 +31,11 @@ struct State {
 	camera_buffer: wgpu::Buffer,
 	camera_uniform: MatrixUniform,
 	camera_bind_group: wgpu::BindGroup,
-	triangle: Mesh,
-	tree: Mesh,
+	model: Mesh,
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
+    async fn new(window: Window, filename: &str) -> Self {
 		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 			backends: wgpu::Backends::all(),
             ..Default::default()
@@ -88,16 +87,20 @@ impl State {
 			source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
 		});
 
-		let camera = Camera::new(
-			Matrix4::from_translation((0.0, 0.0, 3.0).into()),
-			// cgmath::Matrix4::look_at_lh((0.0, 0.0, -3.0).into(), (0.0, 0.0, 0.0).into(), (0.0, 1.0, 0.0).into()),
+		let model = Mesh::from_obj(&device, filename).unwrap();
+		let pos = model.bounding_box.center() + Vector3::new(0.0, 0.0, model.bounding_box.diag());
+
+		let mut camera = Camera::new(
+			Matrix4::from_translation(pos),
 			config.width as f32 / config.height as f32,
 			70.0,
 			0.1,
-			100.0
+			100.0_f32.max(model.bounding_box.diag() * 2.0)
 		);
 
-		let camera_uniform = MatrixUniform::from_Matrix4(camera.view_proj());
+		camera.zoom = model.bounding_box.diag();
+
+		let camera_uniform = MatrixUniform::from_matrix4(camera.view_proj());
 
 		let camera_buffer = device.create_buffer_init(
 			&wgpu::util::BufferInitDescriptor {
@@ -188,8 +191,7 @@ impl State {
 		Self {
             window,
             surface,
-			triangle: Mesh::new(&device),
-			tree: Mesh::from_obj(&device).unwrap(),
+			model,
             device,
             queue,
             config,
@@ -226,7 +228,7 @@ impl State {
     fn update(&mut self) {
 		self.camera.update();
 		
-        self.camera_uniform = MatrixUniform::from_Matrix4(self.camera.view_proj());
+        self.camera_uniform = MatrixUniform::from_matrix4(self.camera.view_proj());
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -272,7 +274,7 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
 			render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
 			// self.triangle.draw(&mut render_pass);
-			self.tree.draw(&mut render_pass);
+			self.model.draw(&mut render_pass);
         }
 	
 		self.queue.submit(std::iter::once(encoder.finish()));
@@ -282,13 +284,13 @@ impl State {
     }
 }
 
-pub async fn run() {
+pub async fn run(filename: &str) {
     env_logger::init();
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-	let mut state = State::new(window).await;
+	let mut state = State::new(window, filename).await;
 
     event_loop.run(move |event, _, control_flow| {
 		match event {
