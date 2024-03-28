@@ -1,6 +1,7 @@
 // https://sotrh.github.io/learn-wgpu/
 
 mod camera;
+mod model;
 
 use cgmath::Matrix4;
 use winit::{
@@ -12,39 +13,7 @@ use winit::{
 use wgpu::util::DeviceExt;
 use camera::{Camera, MatrixUniform};
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-	position: [f32; 3],
-	normal: [f32; 3],
-}
-
-impl Vertex {
-	fn desc() -> wgpu::VertexBufferLayout<'static> {
-		wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                }
-            ]
-        }
-	}
-}
-
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], normal: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], normal: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], normal: [0.0, 0.0, 1.0] },
-];
+use model::{Mesh, Vertex};
 
 struct State {
     surface: wgpu::Surface,
@@ -59,13 +28,12 @@ struct State {
 	camera_buffer: wgpu::Buffer,
 	camera_uniform: MatrixUniform,
 	camera_bind_group: wgpu::BindGroup,
-
-	vertex_buffer: wgpu::Buffer,
+	triangle: Mesh,
+	tree: Mesh,
 }
 
 impl State {
     async fn new(window: Window) -> Self {
-		
 		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 			backends: wgpu::Backends::all(),
             ..Default::default()
@@ -165,14 +133,6 @@ impl State {
 			label: Some("camera_bind_group"),
 		});
 
-		let vertex_buffer = device.create_buffer_init(
-			&wgpu::util::BufferInitDescriptor {
-				label: Some("Vertex Buffer"),
-				contents: bytemuck::cast_slice(VERTICES),
-				usage: wgpu::BufferUsages::VERTEX,
-			}
-		);
-
 		let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Render Pipeline Layout"),
 			bind_group_layouts: &[
@@ -204,7 +164,7 @@ impl State {
 				topology: wgpu::PrimitiveTopology::TriangleList, 
 				strip_index_format: None,
 				front_face: wgpu::FrontFace::Ccw, 
-				cull_mode: None,// Some(wgpu::Face::Back),
+				cull_mode: Some(wgpu::Face::Back),
 				polygon_mode: wgpu::PolygonMode::Fill,
 				unclipped_depth: false,
 				conservative: false,
@@ -221,6 +181,8 @@ impl State {
 		Self {
             window,
             surface,
+			triangle: Mesh::new(&device),
+			tree: Mesh::from_obj(&device).unwrap(),
             device,
             queue,
             config,
@@ -230,7 +192,6 @@ impl State {
 			camera_buffer,
 			camera_uniform,
 			camera_bind_group,
-			vertex_buffer
         }
     }
 
@@ -292,11 +253,10 @@ impl State {
                 timestamp_writes: None,
             });
 
-			
             render_pass.set_pipeline(&self.render_pipeline);
-			render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
 			render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.draw(0..VERTICES.len() as u32, 0..1);
+			// self.triangle.draw(&mut render_pass);
+			self.tree.draw(&mut render_pass);
         }
 	
 		self.queue.submit(std::iter::once(encoder.finish()));
@@ -348,7 +308,6 @@ pub async fn run() {
 					WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
 						state.resize(**new_inner_size);
 					}
-					
 					_ => {}
 				}
 			}

@@ -14,7 +14,7 @@ wgpu = "0.18"
 pollster = "0.3"
 cgmath = "0.18"
 bytemuck = { version = "1.12", features = [ "derive" ] }
-obj-rs = "0.7.1"
+tobj = "4.0.2"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
