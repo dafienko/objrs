@@ -27,6 +27,7 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+	pub zoom: f32,
 
 	dragging: bool,
 	last_cursorpos: PhysicalPosition<f64>,
@@ -42,6 +43,11 @@ pub struct Camera {
 }
 
 impl Camera {
+	const SPEED: f32 = 0.1;
+	const ZOOM_SENSITIVITY: f32 = 0.9;
+	const TRACKPAD_ZOOM_SENSITIVITY: f32 = 0.5;
+	const LOOK_SENSITIVITY: f32 = 0.35;
+
 	pub fn new(transform: cgmath::Matrix4<f32>, aspect: f32, fovy: f32, znear: f32, zfar: f32) -> Self {
 		Camera {
 			transform: transform,
@@ -49,6 +55,7 @@ impl Camera {
 			fovy: fovy,
 			znear: znear,
 			zfar: zfar,
+			zoom: 2.0,
 
 			dragging: false,
 			last_cursorpos: PhysicalPosition { x: 0.0, y: 0.0 },
@@ -110,7 +117,7 @@ impl Camera {
 			WindowEvent::MouseWheel { delta, .. } => {
 				match delta {
 					MouseScrollDelta::LineDelta(_, y) => {
-						self.zoom_factor *= 0.9_f32.powf(*y);
+						self.zoom_factor *= Self::ZOOM_SENSITIVITY.powf(*y);
 					},
 					MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => {
 						self.delta = [
@@ -122,7 +129,7 @@ impl Camera {
 				}
 			},
 			WindowEvent::TouchpadMagnify { delta, .. } => {
-				self.zoom_factor *= 0.5_f32.powf(*delta as f32);
+				self.zoom_factor *= Self::TRACKPAD_ZOOM_SENSITIVITY.powf(*delta as f32);
 			}
 			WindowEvent::CursorMoved { position, .. } => {
 				if self.dragging {
@@ -142,18 +149,20 @@ impl Camera {
 		let y = self.up - self.down;
 		let z = self.backward - self.forward;
 		
+		self.transform = self.transform * Matrix4::from_translation((0.0, 0.0, -self.zoom * self.zoom_factor).into());
+		self.zoom *= self.zoom_factor;
 		let pos = self.transform.w;
-		let dist = Vector3::new(pos.x, pos.y, pos.z).magnitude();
 		self.transform.w = Vector4::new(0.0, 0.0, 0.0, 1.0);
 		
-		let yaw = Matrix4::from_angle_y(Deg { 0: -self.delta[0] * 0.35 });
+		let yaw = Matrix4::from_angle_y(Deg { 0: -self.delta[0] * Self::LOOK_SENSITIVITY });
 		self.transform = yaw * self.transform;
 		
-		let tilt = Matrix4::from_angle_x(Deg { 0: -self.delta[1] * 0.35 });
+		let tilt = Matrix4::from_angle_x(Deg { 0: -self.delta[1] * Self::LOOK_SENSITIVITY });
 		self.transform = self.transform * tilt;
 		
-		self.transform = self.transform * Matrix4::from_translation((0.0, 0.0, dist * self.zoom_factor).into());
-		self.transform = self.transform * Matrix4::from_translation(Vector3::new(x, y, z) * 0.05);
+		self.transform = self.transform * Matrix4::from_translation((0.0, 0.0, self.zoom * self.zoom_factor).into());
+		self.transform = self.transform * Matrix4::from_translation(Vector3::new(x, y, z) * Self::SPEED);
+		self.transform.w += Vector4::new(pos.x, pos.y, pos.z, 0.0);
 		
 		self.zoom_factor = 1.0;
 		self.delta = [0.0, 0.0];
