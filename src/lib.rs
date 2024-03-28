@@ -2,6 +2,7 @@
 
 mod camera;
 mod model;
+mod texture;
 
 use cgmath::Matrix4;
 use winit::{
@@ -11,9 +12,10 @@ use winit::{
 };
 
 use wgpu::util::DeviceExt;
-use camera::{Camera, MatrixUniform};
 
+use camera::{Camera, MatrixUniform};
 use model::{Mesh, Vertex};
+use texture::{Texture};
 
 struct State {
     surface: wgpu::Surface,
@@ -23,6 +25,7 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
 	render_pipeline: wgpu::RenderPipeline,
     window: Window,
+	depth_texture: Texture,
 
 	camera: Camera,
 	camera_buffer: wgpu::Buffer,
@@ -77,6 +80,8 @@ impl State {
         };
 
         surface.configure(&device, &config);
+
+		let depth_texture = Texture::new_depth_texture(&device, &config, "depth_texture");
 
 		let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 			label: Some("Shader"),
@@ -165,7 +170,13 @@ impl State {
 				unclipped_depth: false,
 				conservative: false,
 			},
-			depth_stencil: None, 
+			depth_stencil: Some(wgpu::DepthStencilState {
+				format: texture::Texture::DEPTH_FORMAT,
+				depth_write_enabled: true,
+				depth_compare: wgpu::CompareFunction::Less, 
+				stencil: wgpu::StencilState::default(), 
+				bias: wgpu::DepthBiasState::default(),
+			}),
 			multisample: wgpu::MultisampleState {
 				count: 1, 
 				mask: !0, 
@@ -183,6 +194,7 @@ impl State {
             queue,
             config,
             size,
+			depth_texture,
 			render_pipeline,
 			camera,
 			camera_buffer,
@@ -202,6 +214,7 @@ impl State {
 			self.config.height = new_size.height;
 			self.surface.configure(&self.device, &self.config);
 			self.camera.aspect = self.config.width as f32 / self.config.height as f32;
+			self.depth_texture = Texture::new_depth_texture(&self.device, &self.config, "depth_texture");
 		}
 	}
 
@@ -244,7 +257,14 @@ impl State {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+					view: &self.depth_texture.view,
+					depth_ops: Some(wgpu::Operations {
+						load: wgpu::LoadOp::Clear(1.0),
+						store: wgpu::StoreOp::Store,
+					}),
+					stencil_ops: None,
+				}),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
