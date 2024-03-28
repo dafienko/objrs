@@ -1,5 +1,3 @@
-use std::ops::Bound;
-
 use wgpu::util::DeviceExt;
 use tobj;
 use cgmath::{InnerSpace, Vector3};
@@ -32,16 +30,6 @@ impl Vertex {
 	}
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], normal: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], normal: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], normal: [0.0, 0.0, 1.0] },
-];
-
-const INDICES: &[u32] = &[
-    0, 1, 2
-];
-
 #[derive(Debug)]
 pub struct BoundingBox {
 	min: Vector3<f32>,
@@ -66,34 +54,6 @@ pub struct Mesh {
 }
 
 impl Mesh {
-	pub fn new(device: &wgpu::Device) -> Self {
-		let vertex_buffer = device.create_buffer_init(
-			&wgpu::util::BufferInitDescriptor {
-				label: Some("Vertex Buffer"),
-				contents: bytemuck::cast_slice(VERTICES),
-				usage: wgpu::BufferUsages::VERTEX,
-			}
-		);
-
-		let index_buffer = device.create_buffer_init(
-			&wgpu::util::BufferInitDescriptor {
-				label: Some("Index Buffer"),
-				contents: bytemuck::cast_slice(INDICES),
-				usage: wgpu::BufferUsages::INDEX,
-			}
-		);
-
-		Self {
-			vertex_buffer,
-			index_buffer,
-			bounding_box: BoundingBox {
-				min: Vector3::new(-1.0, -1.0, -1.0),
-				max: Vector3::new(1.0, 1.0, 1.0),
-			},
-			n: INDICES.len() as u32,
-		}
-	}
-
 	pub fn from_obj(device: &wgpu::Device, filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
 		let (models, _) = tobj::load_obj(filename, &tobj::GPU_LOAD_OPTIONS)?;
 
