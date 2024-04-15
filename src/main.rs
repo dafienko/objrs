@@ -3,5 +3,6 @@ use objrs::run;
 
 pub fn main() {
 	let args: Vec<String> = env::args().collect();
-    pollster::block_on(run(args.get(1).unwrap()));
+	let def = String::from("hello");
+    pollster::block_on(run(args.get(1).unwrap_or(&def))); 
 }

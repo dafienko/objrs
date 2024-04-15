@@ -17,6 +17,12 @@ use camera::{Camera, MatrixUniform};
 use model::{Mesh, Vertex};
 use texture::Texture;
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct RenderState {
+    render_mode: i32,
+}
+
 struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -24,6 +30,7 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 	render_pipeline: wgpu::RenderPipeline,
+	wireframe_render_pipeline: wgpu::RenderPipeline,
     window: Window,
 	depth_texture: Texture,
 
@@ -32,6 +39,10 @@ struct State {
 	camera_uniform: MatrixUniform,
 	camera_bind_group: wgpu::BindGroup,
 	model: Mesh,
+
+	render_state_buffer: wgpu::Buffer,
+	render_state_uniform: RenderState,
+	render_state_bind_group:wgpu::BindGroup,
 }
 
 impl State {
@@ -53,7 +64,7 @@ impl State {
 		
 		let (device, queue) = adapter.request_device(
 			&wgpu::DeviceDescriptor {
-				features: wgpu::Features::empty(),
+				features: wgpu::Features::POLYGON_MODE_LINE,
 				limits: wgpu::Limits::default(),
 				label: None,
 			},
@@ -137,15 +148,61 @@ impl State {
 			label: Some("camera_bind_group"),
 		});
 
+		let render_state_uniform = RenderState { 
+			render_mode: 1
+		};
+
+		let render_state_buffer = device.create_buffer_init(
+			&wgpu::util::BufferInitDescriptor {
+				label: Some("Render State Buffer"),
+				contents: bytemuck::cast_slice(&[render_state_uniform]),
+				usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			}
+		);
+
+		let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Uniform,
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				}
+			],
+			label: Some("render_state_bind_group_layout"),
+		});
+
+		let render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			layout: &render_state_bind_group_layout,
+			entries: &[
+				wgpu::BindGroupEntry {
+					binding: 0,
+					resource: render_state_buffer.as_entire_binding(),
+				}
+			],
+			label: Some("render_state_bind_group"),
+		});
+
 		let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Render Pipeline Layout"),
 			bind_group_layouts: &[
-				&camera_bind_group_layout
+				&camera_bind_group_layout,
+				&render_state_bind_group_layout,
 			],
 			push_constant_ranges: &[],
 		});
 
-		let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+		let targets = &[Some(wgpu::ColorTargetState {
+			format: config.format,
+			blend: Some(wgpu::BlendState::REPLACE),
+			write_mask: wgpu::ColorWrites::ALL,
+		})];
+
+		let mut pipeline_descriptor = wgpu::RenderPipelineDescriptor {
 			label: Some("Render Pipeline"),
 			layout: Some(&render_pipeline_layout),
 			vertex: wgpu::VertexState {
@@ -158,11 +215,7 @@ impl State {
 			fragment: Some(wgpu::FragmentState {
 				module: &shader,
 				entry_point: "fs_main",
-				targets: &[Some(wgpu::ColorTargetState {
-					format: config.format,
-					blend: Some(wgpu::BlendState::REPLACE),
-					write_mask: wgpu::ColorWrites::ALL,
-				})],
+				targets: targets,
 			}),
 			primitive: wgpu::PrimitiveState {
 				topology: wgpu::PrimitiveTopology::TriangleList, 
@@ -186,7 +239,12 @@ impl State {
 				alpha_to_coverage_enabled: false, 
 			},
 			multiview: None,
-		});
+		};
+
+		let render_pipeline = device.create_render_pipeline(&pipeline_descriptor);
+		
+		pipeline_descriptor.primitive.polygon_mode = wgpu::PolygonMode::Line;
+		let wireframe_render_pipeline = device.create_render_pipeline(&pipeline_descriptor);
 
 		Self {
             window,
@@ -198,10 +256,14 @@ impl State {
             size,
 			depth_texture,
 			render_pipeline,
+			wireframe_render_pipeline,
 			camera,
 			camera_buffer,
 			camera_uniform,
 			camera_bind_group,
+			render_state_uniform,
+			render_state_buffer,
+			render_state_bind_group
         }
     }
 
@@ -222,18 +284,33 @@ impl State {
 
     fn input(&mut self, event: &WindowEvent) -> bool { 
 		self.camera.input(event);
+		if let WindowEvent::KeyboardInput { input, .. } = event {
+			if let Some(keycode) = input.virtual_keycode {
+				if input.state == ElementState::Pressed && keycode == VirtualKeyCode::V {
+					self.render_state_uniform.render_mode = (self.render_state_uniform.render_mode + 1) % 2;
+
+					self.queue.write_buffer(
+						&self.render_state_buffer,
+						0,
+						bytemuck::cast_slice(&[self.render_state_uniform]),
+					);
+				}
+			}
+		}
+
 		false
 	}
 
     fn update(&mut self) {
 		self.camera.update();
-		
         self.camera_uniform = MatrixUniform::from_matrix4(self.camera.view_proj());
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+
+        
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -271,9 +348,14 @@ impl State {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+			let pipeline = match &self.render_state_uniform.render_mode {
+				1 => &self.wireframe_render_pipeline,
+				_ => &self.render_pipeline,
+			};
+
+            render_pass.set_pipeline(&pipeline);
 			render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-			// self.triangle.draw(&mut render_pass);
+			render_pass.set_bind_group(1, &self.render_state_bind_group, &[]);
 			self.model.draw(&mut render_pass);
         }
 	
@@ -289,6 +371,7 @@ pub async fn run(filename: &str) {
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+	window.set_title(filename);
 
 	let mut state = State::new(window, filename).await;
 
