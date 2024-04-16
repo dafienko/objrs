@@ -38,16 +38,16 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	switch render_state.render_mode {
-		case 0 {
+		case 0 { // solid
 			let light = normalize(vec3<f32>(0.3, -1.0, 0.0));
 			let dot = dot(-light, in.normal);
 			let color = vec3<f32>(max(dot, 0.01));
 			return vec4<f32>(color, 1.0);
 		}
-		case 1 {
+		case 1 { // wireframe
 			return vec4<f32>(0.0, 1.0, 0.0, 1.0);
 		}
-		default {
+		default { // invalid
 			return vec4<f32>(1.0, 0.0, 1.0, 1.0);
 		}
 	}

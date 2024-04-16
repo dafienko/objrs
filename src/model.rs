@@ -89,8 +89,6 @@ impl Mesh {
 			off += n as u32;
 		}
 
-		
-
 		let vertex_buffer = device.create_buffer_init(
 			&wgpu::util::BufferInitDescriptor {
 				label: Some("Vertex Buffer"),

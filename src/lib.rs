@@ -52,6 +52,7 @@ impl State {
             ..Default::default()
         });
         
+		// window outlives instance, this is fine
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
 		
         let adapter = instance.request_adapter(
@@ -76,7 +77,7 @@ impl State {
 			.copied()
 			.filter(|f| f.is_srgb())
 			.next()
-			.unwrap_or(surface_caps.formats[0]);
+			.unwrap_or(surface_caps.formats[0]); // attempt to use the first rgb format, otherwise use whatever's available
 	
 		let size = window.inner_size();
 		let config = wgpu::SurfaceConfiguration {
@@ -106,7 +107,7 @@ impl State {
 			config.width as f32 / config.height as f32,
 			70.0,
 			0.1,
-			100.0_f32.max(model.bounding_box.diag() * 2.0)
+			100.0_f32.max(model.bounding_box.diag() * 2.0) // initialize zfar and zoom depending on size of model bounding box
 		);
 
 		camera.zoom = model.bounding_box.diag();
@@ -309,8 +310,6 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
-
-        
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -320,7 +319,7 @@ impl State {
 			label: Some("Render Encoder"),
 		});
 
-		{
+		{ // render pass must not exist to finish encoder (because render_pass borrows encoder)
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
