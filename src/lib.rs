@@ -150,7 +150,7 @@ impl State {
 		});
 
 		let render_state_uniform = RenderState { 
-			render_mode: 1
+			render_mode: 0
 		};
 
 		let render_state_buffer = device.create_buffer_init(
@@ -245,6 +245,7 @@ impl State {
 		let render_pipeline = device.create_render_pipeline(&pipeline_descriptor);
 		
 		pipeline_descriptor.primitive.polygon_mode = wgpu::PolygonMode::Line;
+		pipeline_descriptor.primitive.cull_mode = None;
 		let wireframe_render_pipeline = device.create_render_pipeline(&pipeline_descriptor);
 
 		Self {
